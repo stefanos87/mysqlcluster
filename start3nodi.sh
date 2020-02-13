@@ -9,7 +9,7 @@
 docker network create groupnet
 
 for N in 1 2 3
-do docker run -d --name=node$N --net=groupnet --hostname=node$N \
+do docker run -d --name=mysql$N --net=groupnet --hostname=mysql$N \
   -v /var/lib/mysql -e MYSQL_ROOT_PASSWORD=root \
   stefanos87/sugar9mysql57:1.0 \
   --server-id=$N \
@@ -26,8 +26,8 @@ do docker run -d --name=node$N --net=groupnet --hostname=node$N \
   --relay-log-recovery='ON' \
   --group-replication-start-on-boot='OFF' \
   --group-replication-group-name='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' \
-  --group-replication-local-address="node$N:33060" \
-  --group-replication-group-seeds='node1:33060,node2:33060,node3:33060' \
+  --group-replication-local-address="mysql$N:33060" \
+  --group-replication-group-seeds='mysql1:33060,mysql2:33060,mysql3:33060' \
   --loose-group-replication-single-primary-mode='OFF' \
   --loose-group-replication-enforce-update-everywhere-checks='ON'
 echo "container $N instanziato"
@@ -39,7 +39,7 @@ docker ps
 
 
 for N in 1 2 3
-do docker exec -it node$N mysql -uroot -proot \
+do docker exec -it mysql$N mysql -uroot -proot \
   -e "SET SQL_LOG_BIN=0;" \
   -e "create user repl;" \
   -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%' IDENTIFIED BY 'root';" \
@@ -55,7 +55,7 @@ done
 
 
 
-docker exec -it node1 mysql -uroot -proot \
+docker exec -it mysql1 mysql -uroot -proot \
   -e "SET GLOBAL group_replication_bootstrap_group=ON;" \
   -e "START GROUP_REPLICATION;" \
   -e "SET GLOBAL group_replication_bootstrap_group=OFF;" \
@@ -65,7 +65,7 @@ sleep 10
 
 
 for N in 2 3
-do docker exec -it node$N mysql -uroot -proot \
+do docker exec -it mysql$N mysql -uroot -proot \
   -e "RESET MASTER;" \
   -e "START GROUP_REPLICATION;" \
   -e "SELECT * FROM performance_schema.replication_group_members;" 
@@ -74,24 +74,24 @@ done
 
 
 
-docker exec -it node1 mysql -uroot -proot \
+docker exec -it mysql1 mysql -uroot -proot \
   -e "SELECT * FROM performance_schema.replication_group_members;" 
 
 echo "creo database e inserisco un valore nella tabella test"
-docker exec -it node1 mysql -uroot -proot  \
+docker exec -it mysql1 mysql -uroot -proot  \
   -e "create database TEST; use TEST; CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY) ENGINE=InnoDB; show tables;" \
   -e "INSERT INTO TEST.t1 VALUES(1);"
 sleep 5
 echo "select valore da tutti e 3 i nodi"
 
 for N in 1 2 3
-do docker exec -it node$N mysql -uroot -proot  \
+do docker exec -it mysql$N mysql -uroot -proot  \
   -e "SHOW VARIABLES WHERE Variable_name = 'hostname';" \
   -e "SELECT * FROM TEST.t1;"
 done
 
 
 for N in 1 2 3
-do docker commit node$N stefanos87/mysqlclusterdb$N
+do docker commit mysql$N stefanos87/mysqlclusterdb$N
 docker push stefanos87/mysqlclusterdb$N:latest
 done
